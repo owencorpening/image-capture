@@ -37,136 +37,123 @@ This is the required column order in your Google Sheet (starting from Column A).
 This code runs as the deployed Web App, listening for `GET` requests and appending rows to the sheet. **This block should be saved as your `Code.gs` file in the Apps Script Editor.**
 
 ```javascript
-/**
- * Handles incoming GET requests from the custom bookmarklet using URL parameters.
- * This is the most CSP-resistant method for cross-site bookmarklets.
- */
 const SHEET_ID = '15Fl84stiKIyv9jGOxE5kMC5pJOXDDtyrm8TJoIlD6yc'; 
 const SHEET_NAME = 'Sheet1'; // ***CRITICAL: MUST MATCH THE TAB NAME***
 
+// --- API KEYS ---
+const UNSPLASH_ACCESS_KEY = '5ZN-dlB6LNrZef1qIwlFkzWoQjoGFdjt19mfuZyTBMA'; // <-- Replace with your actual Unsplash Key
+const PEXELS_ACCESS_KEY = 'WnRQ8bb6iPRim8pkNMzYxBAWGuAIkWcaVOcJAyJxJ8qAHZKvGSpZ7OAx'; 
+// -----------------
+
+/**
+ * Helper to convert camelCase to Human Readable Title Case.
+ */
+function toTitleCase(camel) {
+  return camel
+    .replace(/([A-Z])/g, ' $1')
+    .trim()
+    .replace(/^./, str => str.toUpperCase());
+}
+
+/**
+ * Fetches the author name from the Pexels API.
+ */
+function fetchPexelsAuthor(imageID) {
+  const apiUrl = `https://api.pexels.com/v1/photos/${imageID}`;
+  const options = {
+    headers: {
+      'Authorization': PEXELS_ACCESS_KEY
+    }
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    const data = JSON.parse(response.getContentText());
+    
+    if (data.photographer) {
+      return data.photographer;
+    }
+  } catch (e) {
+    Logger.log("Pexels API fetch failed: " + e.toString());
+  }
+  return "UNKNOWN";
+}
+
+/**
+ * Fetches the author name from the Unsplash API.
+ */
+function fetchUnsplashAuthor(imageID) {
+  const apiUrl = `https://api.unsplash.com/photos/${imageID}?client_id=${UNSPLASH_ACCESS_KEY}`;
+  
+  try {
+    const response = UrlFetchApp.fetch(apiUrl);
+    const data = JSON.parse(response.getContentText());
+    
+    if (data.user && data.user.name) {
+      return data.user.name;
+    }
+  } catch (e) {
+    Logger.log("Unsplash API fetch failed: " + e.toString());
+  }
+  return "UNKNOWN";
+}
+
+/**
+ * Handles incoming GET requests from the custom bookmarklet.
+ */
 function doGet(e) {
-  // e.parameter automatically parses query string data from the URL
   const data = e.parameter;
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(SHEET_NAME);
   
-  // 1. Define the variables for clarity
+  // 1. Define the variables and attempt server-side author lookup
   const name = data.name;
-  const photographer = data.photographer;
+  let photographer = "UNKNOWN"; // Start with UNKNOWN, then try APIs
   const license = data.license;
   const url = data.url; 
   
-  // 2. CONSTRUCT THE ATTRIBUTION STRING for Column G
-  // Extracts the domain name for a cleaner source look (e.g., 'unsplash.com')
+  // 1a. SERVER-SIDE ENHANCEMENT: API Lookup
+  if (url.includes('unsplash.com/photos/')) {
+    const urlParts = url.split('/');
+    const imageID = urlParts[urlParts.length - 1].split('?')[0];
+    photographer = fetchUnsplashAuthor(imageID);
+  // ...inside doGet(e)
+  } else if (url.includes('pexels.com/photo/')) {
+    // NEW ROBUST PEXELS ID EXTRACTION: Use the last path segment (which is the ID)
+    const urlParts = url.split('/');
+    // Get the last segment (e.g., 1234567) and remove any query strings
+    const imageID = urlParts[urlParts.length - 1].split('?')[0]; 
+    
+    // Check if the ID is found and call the API
+    if (imageID) {
+      photographer = fetchPexelsAuthor(imageID);
+    }
+  } 
+
+// ... rest of the doGet(e) function
+
+  // 2. CONSTRUCT THE ATTRIBUTION STRING
+  const cleanName = toTitleCase(name);
   const urlDomainMatch = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n]+)/im);
   const sourceDomain = urlDomainMatch ? urlDomainMatch[1] : url;
   
-  // Final format: "Image: [Name], by [Photographer], Source: [Domain]. License: [Status]."
-  const attributionString = `Image: ${name}, by ${photographer}, Source: ${sourceDomain}. License: ${license}.`;
+  const attributionString = `Image: ${cleanName}, by ${photographer}, Source: ${sourceDomain}. License: ${license}.`;
   
   // 3. Define the final row data for columns A through G
   const rowData = [
     new Date(),               // A: Timestamp
-    name,                     // B: Name
+    name,                     // B: Name (camelCase)
     url,                      // C: Source URL
-    photographer,             // D: Photographer
+    photographer,             // D: Photographer (from API or UNKNOWN)
     license,                  // E: License Status
     '',                       // F: Substack Post Title (left blank)
     attributionString         // G: Attribution String
   ];
   
-  // Append the data
   sheet.appendRow(rowData);
   
-  // Return simple text output for the browser.
   return ContentService.createTextOutput("Success");
 }
-
-function doPost(e) {
-  // This is a placeholder function; data is handled by doGet
-  return ContentService.createTextOutput("Function is ready for GET data.");
-}
-
-```
-## Bookmarklet Unminified Source
-
-This unminified code is provided for maintenance, debugging, and review. It is NOT the code you paste into the browser's bookmarklet bar.
-
-```javascript
-javascript:void((function() {
-
-    // Helper function to convert the page title into a camelCase variable name
-    function toCamelCase(str) {
-        str = str.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-        return str.split(/\s+/)
-            .map((w, i) => 
-                i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-            )
-            .join('');
-    }
-
-    // --- 1. DATA GATHERING ---
-
-    var pageTitle = document.title || 'newImage';
-    var suggestedName = toCamelCase(pageTitle);
-    var pageURL = document.location.href;
-    var photographer = '';
-
-    // Advanced Selector Logic: Tries common attributes/paths for photographer links
-    var authorElement = document.querySelector('a[rel="author"], a[itemprop="author"] span, [data-testid*="photographer"], a[href^="/@"]');
-    
-    if (authorElement) {
-        photographer = authorElement.innerText.trim();
-    } else {
-        // Fallback: Check for text like "Photo by X"
-        var photoBy = document.querySelector('[class*="photographer"], [class*="author"]');
-        if (photoBy && photoBy.innerText.includes('by')) {
-            photographer = photoBy.innerText.replace(/.*by\s/i, '').trim();
-        }
-    }
-    
-    if (!photographer) {
-        photographer = 'UNKNOWN'; // Final Fallback
-    }
-
-    // License Check (Column E)
-    var imageLicense = 'MANUAL CHECK REQUIRED';
-    if (pageURL.includes('pexels.com') || pageURL.includes('pixabay.com') || pageURL.includes('unsplash.com')) {
-        imageLicense = 'CC0 Equivalent (No Attribution)';
-    }
-
-    // --- 2. DATA PREPARATION & EXECUTION ---
-
-    var dataToSend = {
-        name: suggestedName,
-        url: pageURL,
-        photographer: photographer,
-        license: imageLicense
-    };
-
-    // CURRENT DEPLOYMENT URL (Must be updated if the Web App is Redeployed)
-    var webAppURL = '[https://script.google.com/macros/s/AKfycbwuPPkOZMscb-9eRuKR2hEAShTqtVVC2gWcv783cawEqu0UpoMFOO4XDUwqcFwyrURdmQ/exec](https://script.google.com/macros/s/AKfycbwuPPkOZMscb-9eRuKR2hEAShTqtVVC2gWcv783cawEqu0UpoMFOO4XDUwqcFwyrURdmQ/exec)';
-
-    // Encode data into URL query parameters
-    var params = new URLSearchParams(dataToSend).toString();
-    var finalURL = webAppURL + '?' + params;
-
-    // Execute GET request with no-cors to bypass security
-    fetch(finalURL, {
-        method: 'GET',
-        mode: 'no-cors'
-    })
-    .then(response => {
-        // Success: Request left the browser and hit the Web App
-        alert("✅ Data Sent to Compliance Ledger!\n\nName: " + suggestedName + "\nPhotographer: " + photographer + "\nSource: " + pageURL);
-    })
-    .catch(error => {
-        // Failure: Request was blocked by the browser (URL/CSP issue)
-        alert("❌ Error sending data to Google Sheet. Check console.");
-        console.error('Fetch error:', error);
-    });
-
-})());
 ```
 
 ## 🚀 Final Bookmarklet String (Minified & Ready-to-Use)
