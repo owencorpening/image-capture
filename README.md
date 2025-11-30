@@ -1,8 +1,41 @@
 # Image Attribution Logger
 
-The Image Attribution Logger is a seamless, zero-friction tool that automates image compliance for content creation. With a single click of a browser bookmarklet, it captures essential image metadata and instantly logs a formatted attribution string into a central Google Sheet, ensuring compliance is logged **at the point of capture**.
+**Stop leaving images out of your articles because you forgot where you found them.**
 
-The tool is a two-part system that uses a highly reliable cross-origin data transfer method: a simple GET request with URL parameters and the `mode: 'no-cors'` setting to bypass restrictive Content Security Policy (CSP) blocks on source websites (like Unsplash).
+The Image Attribution Logger is a one-click tool that captures image metadata and logs formatted attribution strings to a Google Sheet - at the exact moment you find the image.
+
+- **Takes 2 seconds** to log an image (one click)
+- **Runs on Google's free serverless infrastructure** (zero cost, zero maintenance)
+- **Your data stays private** in your own Google Sheet
+- **Works with Unsplash, Pexels, Pixabay** and falls back gracefully for other sources
+
+Built for Substack writers, bloggers, and content creators who care about proper attribution but hate manual tracking.
+
+## Why This Works (And Why It's Free Forever)
+
+This tool uses **Google Apps Script as a free serverless endpoint** - something most web developers don't even know exists. 
+
+- **Zero infrastructure costs** - Google hosts your endpoint for free
+- **No backend to maintain** - Apps Script handles everything
+- **Scales automatically** - Google's infrastructure, your personal use
+- **Each user gets their own instance** - Your data stays in your Google Sheet, completely private
+
+As a longtime web developer, I had no idea you could create free HTTP endpoints like this. Now you know too.
+
+## What You're Building
+
+```
+[Browser Bookmarklet] 
+       ↓ (click)
+[Captures image data]
+       ↓ (sends via GET request)
+[Your Google Apps Script endpoint - FREE, hosted by Google]
+       ↓ (fetches photographer data from APIs)
+[Your Google Sheet - attribution logged]
+```
+
+This is serverless architecture - usually costs $$ on AWS/Azure. 
+With Google Apps Script, it's completely free.
 
 ## System Components
 
@@ -12,11 +45,11 @@ The tool is a two-part system that uses a highly reliable cross-origin data tran
 | Apps Script | Web App endpoint that receives the request and writes data to the Sheet. | Logic runs in the doGet(e) function. |
 | Bookmarklet | Client-side JS to scrape data, format it, and initiate the request. | Optimized for major image sources (Unsplash, Pexels, Pixabay). |
 
-## 🔒 Security Setup (IMPORTANT)
+## 🔒 Security Setup (5 minutes, protects your data)
 
-### Why Security Matters
+**Why you need this:** Your Web App URL is like a front door. Without a password (the secret token), anyone who finds it could spam your Google Sheet. This step adds that password.
 
-Your Web App URL is publicly accessible, which means anyone who finds it could spam your Google Sheet with fake data. To prevent this, we use a **secret token** that acts like a password - only requests with the correct token will be accepted.
+**Don't worry if this sounds technical** - it's just copy-paste. Takes 5 minutes.
 
 ### Setting Up Security
 
@@ -34,8 +67,8 @@ Your Web App URL is publicly accessible, which means anyone who finds it could s
 | Property Name | Value | Where to Get It |
 |--------------|-------|-----------------|
 | `SECRET_TOKEN` | `[your random string]` | Generate a random 16+ character string |
-| `UNSPLASH_ACCESS_KEY` | `[your Unsplash API key]` | <https://unsplash.com/developers> |
-| `PEXELS_ACCESS_KEY` | `[your Pexels API key]` | <https://www.pexels.com/api/> |
+| `UNSPLASH_ACCESS_KEY` | `[your Unsplash API key]` | https://unsplash.com/developers |
+| `PEXELS_ACCESS_KEY` | `[your Pexels API key]` | https://www.pexels.com/api/ |
 
 - Click **"Save script properties"**
 
@@ -203,6 +236,16 @@ function doGet(e) {
 - Change version to **"New version"**
 - Click **Deploy**
 
+### 📌 Important: This Is Your Personal Instance
+
+When you deploy this, you're creating **your own private endpoint** that writes to **your own Google Sheet**. 
+
+- You can't share your endpoint URL with others (they'd write to your sheet)
+- Each person who uses this tool needs to deploy their own instance
+- This is a good thing - your data stays completely private
+
+Think of it like everyone building their own personal API, for free.
+
 ## Bookmarklet Code
 
 This is the single line of code you paste directly into your browser's bookmark manager. **Replace the placeholders before using:**
@@ -216,10 +259,16 @@ javascript:void((function(){function toCamelCase(str){str=str.replace(/[^a-zA-Z0
 
 ### Installing the Bookmarklet
 
-1. Create a new bookmark in your browser
-2. Name it: "📸 Log Image"
-3. Paste the bookmarklet code (with your URL and token) as the URL
-4. Save
+### 💡 For Non-Developers
+
+If you've never edited a bookmark's URL before, here's what "paste the bookmarklet code" means:
+
+1. Right-click your bookmarks bar → "Add page" or "Add bookmark"
+2. In the "Name" field: `📸 Log Image`
+3. In the "URL" field: Delete everything and paste the bookmarklet code (after replacing YOUR_WEB_APP_URL_HERE and YOUR_SECRET_TOKEN_HERE)
+4. Click Save
+
+That's it. The bookmark is now a tiny program that runs when you click it.
 
 ### Using the Bookmarklet
 
