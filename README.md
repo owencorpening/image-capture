@@ -240,11 +240,17 @@ function doGet(e) {
 
 When you deploy this, you're creating **your own private endpoint** that writes to **your own Google Sheet**. 
 
-- You can't share your endpoint URL with others (they'd write to your sheet)
-- Each person who uses this tool needs to deploy their own instance
-- This is a good thing - your data stays completely private
+**For individual use:**
+- Each person deploys their own instance
+- Your data stays completely private in your sheet
 
-Think of it like everyone building their own personal API, for free.
+**For team use (experimental):**
+- Theoretically, one person could deploy and share the Web App URL + token with teammates
+- Everyone would write to the same shared Google Sheet
+- This *should* work, but I haven't tested it extensively
+- If you try this with your team, let me know if it works!
+
+Think of it like everyone building their own personal API, for free - or optionally sharing one API across a team.
 
 ## Bookmarklet Code
 
@@ -258,6 +264,8 @@ javascript:void((function(){function toCamelCase(str){str=str.replace(/[^a-zA-Z0
 ```
 
 ### Installing the Bookmarklet
+
+**Browser compatibility:** Built and tested in Chrome. Should work in other browsers, but not tested. Let me know if you try it elsewhere!
 
 ### 💡 For Non-Developers
 
