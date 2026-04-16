@@ -50,10 +50,10 @@ javascript:void((function () {
     url:         pageURL,
     photographer: photographer,
     license:     imageLicense,
-    token:       'YOUR_SECRET_TOKEN_HERE'
+    token:       'S7wnn0zBQf5pZoZJmRQw'
   };
 
-  var webAppURL = 'YOUR_WEB_APP_URL_HERE';
+  var webAppURL = 'https://script.google.com/macros/s/AKfycbxGX-cH4Lqat1e0ygnF0SWeFBf5qeQe1t0z_MsD_WlDswqVzjX4ckPwPCV6636JqeJvyQ/exec';
   var params    = new URLSearchParams(dataToSend).toString();
   var finalURL  = webAppURL + '?' + params;
 

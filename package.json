@@ -1,0 +1,24 @@
+{
+  "name": "image-capture",
+  "version": "1.0.0",
+  "description": "**Stop leaving images out of your articles because you forgot where you found them.**",
+  "main": "bookmarklet.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/owencorpening/image-capture.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/owencorpening/image-capture/issues"
+  },
+  "homepage": "https://github.com/owencorpening/image-capture#readme",
+  "devDependencies": {
+    "jest": "^30.3.0"
+  }
+}

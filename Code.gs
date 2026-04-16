@@ -68,7 +68,8 @@ function doGet(e) {
     photographer = fetchUnsplashAuthor(imageID);
 
   } else if (url.includes('pexels.com/photo/')) {
-    const pathAndQuery = url.split('.com')[1] || url.split('.co')[1];
+    const pathOnly = url.split('?')[0].split('#')[0];
+    const pathAndQuery = pathOnly.split('.com')[1] || pathOnly.split('.co')[1];
     const pathSegments = pathAndQuery.split('/').filter(s => s.length > 0);
     const lastSegment  = pathSegments[pathSegments.length - 1];
 
