@@ -1,0 +1,12 @@
+[Unit]
+Description=Image watch — route camelCase downloads to series folders
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/watch-images
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

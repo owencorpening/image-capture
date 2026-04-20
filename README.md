@@ -2,7 +2,7 @@
 
 **Stop leaving images out of your articles because you forgot where you found them.**
 
-The Image Attribution Logger is a one-click tool that captures image metadata and logs formatted attribution strings to a Google Sheet - at the exact moment you find the image.
+The Image Attribution Logger is a two-part pipeline that captures image metadata and routes files to the right place — at the exact moment you find the image.
 
 - **Takes 2 seconds** to log an image (one click)
 - **Runs on Google's free serverless infrastructure** (zero cost, zero maintenance)
@@ -13,7 +13,7 @@ Built for Substack writers, bloggers, and content creators who care about proper
 
 ## Why This Works (And Why It's Free Forever)
 
-This tool uses **Google Apps Script as a free serverless endpoint** - something most web developers don't even know exists. 
+This tool uses **Google Apps Script as a free serverless endpoint** - something most web developers don't even know exists.
 
 - **Zero infrastructure costs** - Google hosts your endpoint for free
 - **No backend to maintain** - Apps Script handles everything
@@ -22,22 +22,25 @@ This tool uses **Google Apps Script as a free serverless endpoint** - something 
 
 As a longtime web developer, I had no idea you could create free HTTP endpoints like this. Now you know too.
 
-## What You're Building
+## Full Pipeline
 
-```
-[Browser Bookmarklet] 
-       ↓ (click)
-[Captures image data + og:image URL]
-       ↓ (sends via GET request)
-[Your Google Apps Script endpoint - FREE, hosted by Google]
-       ↓ (fetches photographer data from APIs)
-[Your Google Sheet - attribution logged]
-       ↓ (on success)
-[Image downloaded to ~/Downloads/ as camelCaseName.ext]
+```text
+[Browser Bookmarklet]
+       ↓ (click on image page)
+[Captures og:image URL + page metadata]
+       ↓ (GET request)
+[Google Apps Script endpoint — free, hosted by Google]
+       ↓ (API lookup for photographer)
+[Google Sheet — attribution row logged]
+       ↓ (blob download)
+[~/Downloads/camelCaseName.ext]
+       ↓ (watch-images.py detects new file)
+[~/dev/wraith/substack-ideas/series-[name]/images/]
 ```
 
-This is serverless architecture - usually costs $$ on AWS/Azure. 
-With Google Apps Script, it's completely free.
+**Part 1 — Bookmarklet (capture):** logs metadata to Google Sheet and downloads the image to `~/Downloads/` with a camelCase filename.
+
+**Part 2 — Watch script (route):** background daemon picks up the download and moves it to the correct series folder automatically.
 
 ## System Components
 
@@ -46,6 +49,61 @@ With Google Apps Script, it's completely free.
 | Google Sheet | Central database for logging attribution and tracking post titles. | Sheet Name: Sheet1 (Must match the tab name exactly) |
 | Apps Script | Web App endpoint that receives the request and writes data to the Sheet. | Logic runs in the doGet(e) function. |
 | Bookmarklet | Client-side JS to scrape data, format it, and initiate the request. | Optimized for major image sources (Unsplash, Pexels, Pixabay). |
+| watch-images.py | Background daemon that routes camelCase downloads to the correct series folder. | Reads ~/.image-watch-config for active series. |
+| setimage.sh | Shell script to update the active series/part config. | Alias as `setimage` in your shell. |
+
+## Watch Script Setup
+
+### 1. Install the script
+
+```bash
+cp ~/dev/image-capture/watch-images.py ~/.local/bin/watch-images
+chmod +x ~/.local/bin/watch-images
+```
+
+### 2. Set your active series
+
+```bash
+# Copy the template config
+cp ~/dev/image-capture/.image-watch-config.template ~/.image-watch-config
+
+# Then update it any time with:
+setimage baja-water-spine 03
+```
+
+Add the alias to your shell (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+alias setimage="$HOME/dev/image-capture/setimage.sh"
+```
+
+### 3. Enable the systemd service
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp ~/dev/image-capture/image-watch.service ~/.config/systemd/user/image-watch.service
+systemctl --user daemon-reload
+systemctl --user enable --now image-watch
+```
+
+Verify it's running:
+
+```bash
+systemctl --user status image-watch
+```
+
+### File routing
+
+| Filename pattern | Destination |
+| ---------------- | ----------- |
+| `camelCaseName.jpg` | `series-[name]/images/` |
+| `camelCaseName-crop-16x9.jpg` | `series-[name]/images/covers/` |
+| `camelCaseName-crop-table.jpg` | `series-[name]/images/tables/` |
+| `camelCaseName-anim-desc.gif` | `series-[name]/images/animations/` |
+
+Files that do **not** match camelCase (e.g. `Screenshot 2026-04-17.png`, `unsplash-abc123.jpg`) are silently ignored.
+
+Moves are logged to `~/dev/wraith/substack-ideas/image-watch.log`.
 
 ## 🔒 Security Setup (5 minutes, protects your data)
 

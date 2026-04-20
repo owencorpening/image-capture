@@ -1,0 +1,5 @@
+# Image watch config — copy to ~/.image-watch-config and fill in values.
+# Update with: setimage <series> <part>
+
+SERIES=baja-water-spine
+PART=03
