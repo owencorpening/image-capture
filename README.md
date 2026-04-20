@@ -27,11 +27,13 @@ As a longtime web developer, I had no idea you could create free HTTP endpoints 
 ```
 [Browser Bookmarklet] 
        ↓ (click)
-[Captures image data]
+[Captures image data + og:image URL]
        ↓ (sends via GET request)
 [Your Google Apps Script endpoint - FREE, hosted by Google]
        ↓ (fetches photographer data from APIs)
 [Your Google Sheet - attribution logged]
+       ↓ (on success)
+[Image downloaded to ~/Downloads/ as camelCaseName.ext]
 ```
 
 This is serverless architecture - usually costs $$ on AWS/Azure. 
@@ -260,7 +262,7 @@ This is the single line of code you paste directly into your browser's bookmark 
 - `YOUR_SECRET_TOKEN_HERE` → Your secret token (same one from Script Properties)
 
 ```javascript
-javascript:void((function(){function toCamelCase(str){str=str.replace(/[^a-zA-Z0-9 ]/g,'').trim();return str.split(/\s+/).map((w,i)=>i==0?w.toLowerCase():w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join('');}var pageTitle=document.title||'newImage';var suggestedName=toCamelCase(pageTitle);var pageURL=document.location.href;var photographer='';var authorElement=document.querySelector('a[rel="author"],a[itemprop="author"] span,[data-testid*="photographer"],a[href^="/@"]');if(authorElement){photographer=authorElement.innerText.trim();}if(!photographer){var photoBy=document.querySelector('[class*="photographer"],[class*="author"]');if(photoBy&&photoBy.innerText.includes('by')){photographer=photoBy.innerText.replace(/.*by\\s/i,'').trim();}}if(!photographer){photographer='UNKNOWN';}var imageLicense='MANUAL CHECK REQUIRED';if(pageURL.includes('pexels.com')||pageURL.includes('pixabay.com')||pageURL.includes('unsplash.com')){imageLicense='CC0 Equivalent (No Attribution)';}var dataToSend={name:suggestedName,url:pageURL,photographer:photographer,license:imageLicense,token:'YOUR_SECRET_TOKEN_HERE'};var webAppURL='YOUR_WEB_APP_URL_HERE';var params=new URLSearchParams(dataToSend).toString();var finalURL=webAppURL+'?'+params;fetch(finalURL,{method:'GET',mode:'no-cors'}).then(response=>{alert("✅ Data Sent to Compliance Ledger!\n\nName: "+suggestedName+"\nPhotographer: "+photographer+"\nSource: "+pageURL);}).catch(error=>{alert("❌ Error sending data to Google Sheet. Check console.");console.error('Fetch error:',error);});})());
+javascript:void((function(){function toCamelCase(str){str=str.replace(/[^a-zA-Z0-9 ]/g,'').trim();return str.split(/\s+/).map((w,i)=>i==0?w.toLowerCase():w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join('');}function getImageUrl(){var og=document.querySelector('meta[property="og:image"]');return og?og.getAttribute('content')||'':'';}function getExt(url){if(!url)return'.jpg';var path=url.split('?')[0].split('#')[0];var m=path.match(/\.(jpe?g|png|webp|gif)$/i);if(m)return'.'+m[1].toLowerCase();var fm=url.match(/[?&]fm=(jpe?g|png|webp|gif)/i);if(fm)return'.'+fm[1].toLowerCase();return'.jpg';}var pageTitle=document.title||'newImage';var suggestedName=toCamelCase(pageTitle);var pageURL=document.location.href;var photographer='';var authorElement=document.querySelector('a[rel="author"],a[itemprop="author"] span,[data-testid*="photographer"],a[href^="/@"]');if(authorElement){photographer=authorElement.innerText.trim();}if(!photographer){var photoBy=document.querySelector('[class*="photographer"],[class*="author"]');if(photoBy&&photoBy.innerText.includes('by')){photographer=photoBy.innerText.replace(/.*by\s/i,'').trim();}}if(!photographer){photographer='UNKNOWN';}var imageLicense='MANUAL CHECK REQUIRED';if(pageURL.includes('pexels.com')||pageURL.includes('pixabay.com')||pageURL.includes('unsplash.com')){imageLicense='CC0 Equivalent (No Attribution)';}var dataToSend={name:suggestedName,url:pageURL,photographer:photographer,license:imageLicense,token:'YOUR_SECRET_TOKEN_HERE'};var webAppURL='YOUR_WEB_APP_URL_HERE';var params=new URLSearchParams(dataToSend).toString();var finalURL=webAppURL+'?'+params;fetch(finalURL,{method:'GET',mode:'no-cors'}).then(function(){var imgUrl=getImageUrl();var ext=getExt(imgUrl);var filename=suggestedName+ext;if(!imgUrl){alert('✅ Sheet row logged ✓\n⚠️ No image found on page — save manually.\n\nName: '+suggestedName+'\nPhotographer: '+photographer+'\nSource: '+pageURL);return;}fetch(imgUrl).then(function(r){return r.blob();}).then(function(blob){var blobUrl=URL.createObjectURL(blob);var a=document.createElement('a');a.href=blobUrl;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(blobUrl);},1000);alert('✅ Logged + Downloaded!\n\nSheet row logged ✓\nImage downloaded as: '+filename+' ✓\n\nPhotographer: '+photographer);}).catch(function(){alert('✅ Sheet row logged ✓\n⚠️ Download failed (CORS) — save the image manually.\n\nName: '+suggestedName+'\nPhotographer: '+photographer);});}).catch(function(error){alert('❌ Error sending data to Google Sheet. Check console.');console.error('Fetch error:',error);});})());
 ```
 
 ### Installing the Bookmarklet
@@ -280,10 +282,11 @@ That's it. The bookmark is now a tiny program that runs when you click it.
 
 ### Using the Bookmarklet
 
-1. Navigate to an image page (Unsplash, Pexels, etc.)
+1. Navigate to an image page (Unsplash, Pexels, or Pixabay)
 2. Click your "📸 Log Image" bookmark
-3. You'll see a success alert with the captured data
-4. Check your Google Sheet - the attribution is now logged!
+3. The bookmarklet logs the row to your Google Sheet **and** downloads the image automatically
+4. You'll see a success alert confirming both actions
+5. The file lands in your default Downloads folder as `camelCaseName.ext`
 
 ## ⚠️ Security Reminders
 
@@ -294,10 +297,11 @@ That's it. The bookmark is now a tiny program that runs when you click it.
 
 ## How It Works
 
-1. **Bookmarklet** scrapes the page title, URL, and attempts to find photographer info
-2. **GET request** sends this data (with your secret token) to your Web App URL
+1. **Bookmarklet** scrapes the page title, URL, photographer, and `og:image` URL from the page DOM
+2. **GET request** sends the metadata (with your secret token) to your Web App URL
 3. **Apps Script** verifies the token, fetches additional photographer data from APIs if available, formats the attribution string, and appends a row to your Google Sheet
-4. **Success!** Your compliance is logged instantly at the point of capture
+4. **Image download** — after the sheet request fires, the bookmarklet fetches the `og:image` as a blob and triggers a browser download named `camelCaseName.ext` (extension detected from the image URL; defaults to `.jpg`)
+5. **Success alert** confirms both: sheet row logged ✓ and image downloaded ✓
 
 ---
 

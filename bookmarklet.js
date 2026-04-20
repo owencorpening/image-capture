@@ -13,6 +13,22 @@ javascript:void((function () {
     ).join('');
   }
 
+  function getImageUrl() {
+    var og = document.querySelector('meta[property="og:image"]');
+    return og ? og.getAttribute('content') || '' : '';
+  }
+
+  // Unsplash serves images without an extension in the path but exposes fm= in query params.
+  function getExt(url) {
+    if (!url) return '.jpg';
+    var path = url.split('?')[0].split('#')[0];
+    var m = path.match(/\.(jpe?g|png|webp|gif)$/i);
+    if (m) return '.' + m[1].toLowerCase();
+    var fm = url.match(/[?&]fm=(jpe?g|png|webp|gif)/i);
+    if (fm) return '.' + fm[1].toLowerCase();
+    return '.jpg';
+  }
+
   var pageTitle     = document.title || 'newImage';
   var suggestedName = toCamelCase(pageTitle);
   var pageURL       = document.location.href;
@@ -46,11 +62,11 @@ javascript:void((function () {
   }
 
   var dataToSend = {
-    name:        suggestedName,
-    url:         pageURL,
+    name:         suggestedName,
+    url:          pageURL,
     photographer: photographer,
-    license:     imageLicense,
-    token:       'S7wnn0zBQf5pZoZJmRQw'
+    license:      imageLicense,
+    token:        'S7wnn0zBQf5pZoZJmRQw'
   };
 
   var webAppURL = 'https://script.google.com/macros/s/AKfycbxGX-cH4Lqat1e0ygnF0SWeFBf5qeQe1t0z_MsD_WlDswqVzjX4ckPwPCV6636JqeJvyQ/exec';
@@ -59,12 +75,47 @@ javascript:void((function () {
 
   fetch(finalURL, { method: 'GET', mode: 'no-cors' })
     .then(function () {
-      alert(
-        '✅ Data Sent to Compliance Ledger!\n\n' +
-        'Name: '         + suggestedName + '\n' +
-        'Photographer: ' + photographer  + '\n' +
-        'Source: '       + pageURL
-      );
+      var imgUrl   = getImageUrl();
+      var ext      = getExt(imgUrl);
+      var filename = suggestedName + ext;
+
+      if (!imgUrl) {
+        alert(
+          '✅ Sheet row logged ✓\n' +
+          '⚠️ No image found on page — save manually.\n\n' +
+          'Name: '         + suggestedName + '\n' +
+          'Photographer: ' + photographer  + '\n' +
+          'Source: '       + pageURL
+        );
+        return;
+      }
+
+      fetch(imgUrl)
+        .then(function (r) { return r.blob(); })
+        .then(function (blob) {
+          var blobUrl = URL.createObjectURL(blob);
+          var a       = document.createElement('a');
+          a.href      = blobUrl;
+          a.download  = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 1000);
+          alert(
+            '✅ Logged + Downloaded!\n\n' +
+            'Sheet row logged ✓\n' +
+            'Image downloaded as: ' + filename + ' ✓\n\n' +
+            'Photographer: ' + photographer
+          );
+        })
+        .catch(function () {
+          alert(
+            '✅ Sheet row logged ✓\n' +
+            '⚠️ Download failed (CORS) — save the image manually.\n\n' +
+            'Name: '         + suggestedName + '\n' +
+            'Photographer: ' + photographer
+          );
+        });
     })
     .catch(function (error) {
       alert('❌ Error sending data to Google Sheet. Check console.');
