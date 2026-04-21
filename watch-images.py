@@ -49,15 +49,13 @@ def read_config():
     return cfg.get('SERIES'), cfg.get('PART')
 
 
-def destination_dir(filename: str, series: str) -> Path:
-    base = SERIES_BASE / f"series-{series}" / "images"
-    if '-anim-' in filename:
-        return base / "animations"
-    if '-crop-table' in filename:
-        return base / "tables"
-    if '-crop-' in filename:
-        return base / "covers"
-    return base
+def destination_dir(filename: str, series: str, part: str) -> Path:
+    base = SERIES_BASE / f"{series}-series"
+    if part:
+        matches = sorted(base.glob(f"part-{part}-*"))
+        part_dir = matches[0] if matches else base / f"part-{part}"
+        return part_dir / "images"
+    return base / "images"
 
 
 def wait_for_file_stable(path: Path, timeout=10) -> bool:
@@ -89,7 +87,7 @@ def handle_new_file(path: Path):
     if not wait_for_file_stable(path):
         return
 
-    dest_dir = destination_dir(filename, series)
+    dest_dir = destination_dir(filename, series, part or "")
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / filename
 

@@ -4,7 +4,8 @@
   "description": "**Stop leaving images out of your articles because you forgot where you found them.**",
   "main": "bookmarklet.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "deploy": "bash deploy.sh"
   },
   "repository": {
     "type": "git",

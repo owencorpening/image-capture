@@ -52,6 +52,20 @@ As a longtime web developer, I had no idea you could create free HTTP endpoints 
 | watch-images.py | Background daemon that routes camelCase downloads to the correct series folder. | Reads ~/.image-watch-config for active series. |
 | setimage.sh | Shell script to update the active series/part config. | Alias as `setimage` in your shell. |
 
+## Deploying Changes
+
+After editing the bookmarklet or watch scripts, run:
+
+```bash
+npm run deploy
+```
+
+This will:
+
+1. Minify `bookmarklet.js` and copy the result to your clipboard — paste into your bookmark URL field
+2. Copy `watch-images.py` and `image-title-server.py` to `~/.local/bin/`
+3. Restart both systemd services
+
 ## Watch Script Setup
 
 ### 1. Install the script
@@ -92,16 +106,40 @@ Verify it's running:
 systemctl --user status image-watch
 ```
 
+Common commands:
+
+```bash
+systemctl --user start image-watch      # start
+systemctl --user stop image-watch       # stop
+systemctl --user restart image-watch    # restart after code changes
+systemctl --user disable image-watch    # stop and don't start on login
+systemctl --user enable --now image-watch  # re-enable and start
+```
+
 ### File routing
 
-| Filename pattern | Destination |
-| ---------------- | ----------- |
-| `camelCaseName.jpg` | `series-[name]/images/` |
-| `camelCaseName-crop-16x9.jpg` | `series-[name]/images/covers/` |
-| `camelCaseName-crop-table.jpg` | `series-[name]/images/tables/` |
-| `camelCaseName-anim-desc.gif` | `series-[name]/images/animations/` |
+Routing is controlled by `~/.image-watch-config`:
+
+```
+SERIES=water
+PART=09
+```
+
+| Config | Destination |
+| ------ | ----------- |
+| `SERIES=water`, `PART=09` | `water-series/part-09/images/` |
+| `SERIES=water` (no PART) | `water-series/images/` |
+| `SERIES=cng`, `PART=06` | `cng-series/part-06/images/` |
+
+All matching files land flat in the images directory — no subdirectories. File type is signaled by the filename itself (e.g. `bajaMap-crop-1080x1080.jpg`).
 
 Files that do **not** match camelCase (e.g. `Screenshot 2026-04-17.png`, `unsplash-abc123.jpg`) are silently ignored.
+
+Update the active series/part at any time — no restart needed:
+
+```bash
+setimage water 09
+```
 
 Moves are logged to `~/dev/wraith/substack-ideas/image-watch.log`.
 

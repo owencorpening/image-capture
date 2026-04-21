@@ -27,9 +27,10 @@ function doGet(e) {
   const ss   = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(SHEET_NAME);
 
-  const name    = data.name;
-  const license = data.license;
-  const url     = data.url;
+  const name      = data.name;
+  const license   = data.license;
+  const url       = data.url;
+  const postTitle = data.postTitle || '';
   let photographer = "UNKNOWN";
 
   // --- LOCAL API FETCH FUNCTIONS ---
@@ -98,7 +99,7 @@ function doGet(e) {
     url,                 // C: Source URL
     photographer,        // D: Photographer
     license,             // E: License
-    '',                  // F: Substack post title (manual)
+    postTitle,           // F: Substack post title (from ~/.image-watch-title)
     attributionString    // G: Attribution string
   ];
 

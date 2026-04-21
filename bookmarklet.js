@@ -61,19 +61,28 @@ javascript:void((function () {
     imageLicense = 'CC0 Equivalent (No Attribution)';
   }
 
-  var dataToSend = {
-    name:         suggestedName,
-    url:          pageURL,
-    photographer: photographer,
-    license:      imageLicense,
-    token:        'S7wnn0zBQf5pZoZJmRQw'
-  };
-
   var webAppURL = 'https://script.google.com/macros/s/AKfycbxGX-cH4Lqat1e0ygnF0SWeFBf5qeQe1t0z_MsD_WlDswqVzjX4ckPwPCV6636JqeJvyQ/exec';
-  var params    = new URLSearchParams(dataToSend).toString();
-  var finalURL  = webAppURL + '?' + params;
 
-  fetch(finalURL, { method: 'GET', mode: 'no-cors' })
+  function sendToSheet(postTitle) {
+    var dataToSend = {
+      name:         suggestedName,
+      url:          pageURL,
+      photographer: photographer,
+      license:      imageLicense,
+      postTitle:    postTitle || '',
+      token:        'S7wnn0zBQf5pZoZJmRQw'
+    };
+    var finalURL = webAppURL + '?' + new URLSearchParams(dataToSend).toString();
+    return fetch(finalURL, { method: 'GET', mode: 'no-cors' });
+  }
+
+  // Fetch current post title from local title server, fall back to empty string.
+  fetch('http://localhost:9876/')
+    .then(function (r) { return r.text(); })
+    .catch(function ()  { return '';      })
+    .then(function (postTitle) {
+      return sendToSheet(postTitle.trim());
+    })
     .then(function () {
       var imgUrl   = getImageUrl();
       var ext      = getExt(imgUrl);
@@ -105,7 +114,7 @@ javascript:void((function () {
             '✅ Logged + Downloaded!\n\n' +
             'Sheet row logged ✓\n' +
             'Image downloaded as: ' + filename + ' ✓\n\n' +
-            'Photographer: ' + photographer
+            'Photographer: ' + (photographer === 'UNKNOWN' ? 'UNKNOWN (check sheet)' : photographer)
           );
         })
         .catch(function () {

@@ -1,0 +1,12 @@
+[Unit]
+Description=Image title server — serves ~/.image-watch-title on port 9876
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/bin/image-title-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
