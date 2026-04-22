@@ -18,8 +18,11 @@ function toTitleCase(camel) {
 }
 
 function doGet(e) {
+  Logger.log('params: ' + JSON.stringify(e.parameter));
+
   // Security: reject requests without the correct token
   if (e.parameter.token !== SECRET_TOKEN) {
+    Logger.log('token mismatch — received: ' + e.parameter.token);
     return ContentService.createTextOutput("Unauthorized");
   }
 

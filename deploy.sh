@@ -2,9 +2,13 @@
 set -euo pipefail
 
 echo "▶ Minifying bookmarklet..."
-# Strip the comment header (lines 1-6) before passing to terser, then re-wrap.
-MINIFIED=$(sed '1,6d' bookmarklet.js | npx terser --compress --mangle 2>/dev/null)
-echo "javascript:void($MINIFIED)" | xclip -selection clipboard
+# Strip comment header, minify, strip trailing semicolon, wrap in javascript:void()
+MINIFIED=$(sed '1,6d' bookmarklet.js \
+  | npx terser --compress --mangle --format quote_style=1 2>/dev/null \
+  | sed 's/;$//')
+BOOKMARKLET="javascript:void($MINIFIED)"
+echo "$BOOKMARKLET" | xclip -selection clipboard
+echo "$BOOKMARKLET" | xclip -selection primary
 echo "✅ Bookmarklet copied to clipboard"
 
 echo "▶ Installing watch scripts..."
