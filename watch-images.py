@@ -22,7 +22,7 @@ LOG_FILE        = SERIES_BASE / "image-watch.log"
 CAMEL_RE = re.compile(
     r'^[a-z][a-zA-Z0-9]+'
     r'(?:-(?:crop|anim)-[a-zA-Z0-9x.\-]+)?'
-    r'\.(jpg|jpeg|png|webp|gif)$'
+    r'\.(jpg|jpeg|png|webp|gif|svg|html)$'
 )
 
 logging.basicConfig(
