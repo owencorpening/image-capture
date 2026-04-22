@@ -120,6 +120,44 @@ describe('detectLicense', () => {
   });
 });
 
+// --- bookmarklet build ---
+describe('bookmarklet build', () => {
+  const { execSync } = require('child_process');
+  let bookmarklet;
+
+  beforeAll(() => {
+    bookmarklet = execSync(
+      "sed '1,6d' bookmarklet.js | npx terser --compress --mangle --format quote_style=1 2>/dev/null | sed 's/;$//'"
+    ).toString().trim();
+    bookmarklet = `javascript:void(${bookmarklet})`;
+  });
+
+  test('starts with javascript:void(', () => {
+    expect(bookmarklet.startsWith('javascript:void(')).toBe(true);
+  });
+
+  test('ends with ) and no trailing semicolon', () => {
+    expect(bookmarklet.endsWith(';)')).toBe(false);
+    expect(bookmarklet.endsWith(')')).toBe(true);
+  });
+
+  test('contains correct token', () => {
+    expect(bookmarklet).toContain('S7wnn0zBQf5pZoZJmRQw');
+  });
+
+  test('contains localhost title server fetch', () => {
+    expect(bookmarklet).toContain('localhost:9876');
+  });
+
+  test('contains postTitle parameter', () => {
+    expect(bookmarklet).toContain('postTitle');
+  });
+
+  test('contains Apps Script URL', () => {
+    expect(bookmarklet).toContain('script.google.com/macros/s/');
+  });
+});
+
 // --- isAuthorized ---
 describe('isAuthorized', () => {
   test('returns true when tokens match', () => {
