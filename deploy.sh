@@ -14,7 +14,8 @@ echo "✅ Bookmarklet copied to clipboard"
 echo "▶ Installing watch scripts..."
 cp watch-images.py ~/.local/bin/watch-images
 cp image-title-server.py ~/.local/bin/image-title-server
-chmod +x ~/.local/bin/watch-images ~/.local/bin/image-title-server
+cp setpublished.sh ~/.local/bin/setpublished
+chmod +x ~/.local/bin/watch-images ~/.local/bin/image-title-server ~/.local/bin/setpublished
 echo "✅ Scripts installed to ~/.local/bin/"
 
 echo "▶ Restarting services..."
