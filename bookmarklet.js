@@ -99,10 +99,10 @@ javascript:void((function () {
     .then(function (r) { return r.text(); })
     .catch(function ()  { return '';      })
     .then(function (postTitle) {
+      downloadMeta();
       return sendToSheet(postTitle.trim());
     })
     .then(function () {
-      downloadMeta();
 
       var imgUrl   = getImageUrl();
       var ext      = getExt(imgUrl);
