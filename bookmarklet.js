@@ -76,6 +76,24 @@ javascript:void((function () {
     return fetch(finalURL, { method: 'GET', mode: 'no-cors' });
   }
 
+  function downloadMeta() {
+    var meta = JSON.stringify({
+      name:         suggestedName,
+      url:          pageURL,
+      photographer: photographer,
+      license:      imageLicense
+    }, null, 2);
+    var blob    = new Blob([meta], { type: 'application/json' });
+    var blobUrl = URL.createObjectURL(blob);
+    var a       = document.createElement('a');
+    a.href      = blobUrl;
+    a.download  = suggestedName + '.meta.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 1000);
+  }
+
   // Fetch current post title from local title server, fall back to empty string.
   fetch('http://localhost:9876/')
     .then(function (r) { return r.text(); })
@@ -84,6 +102,8 @@ javascript:void((function () {
       return sendToSheet(postTitle.trim());
     })
     .then(function () {
+      downloadMeta();
+
       var imgUrl   = getImageUrl();
       var ext      = getExt(imgUrl);
       var filename = suggestedName + ext;
@@ -91,6 +111,7 @@ javascript:void((function () {
       if (!imgUrl) {
         alert(
           '✅ Sheet row logged ✓\n' +
+          '✅ Meta file downloaded ✓\n' +
           '⚠️ No image found on page — save manually.\n\n' +
           'Name: '         + suggestedName + '\n' +
           'Photographer: ' + photographer  + '\n' +
@@ -113,6 +134,7 @@ javascript:void((function () {
           alert(
             '✅ Logged + Downloaded!\n\n' +
             'Sheet row logged ✓\n' +
+            'Meta file downloaded ✓\n' +
             'Image downloaded as: ' + filename + ' ✓\n\n' +
             'Photographer: ' + (photographer === 'UNKNOWN' ? 'UNKNOWN (check sheet)' : photographer)
           );
@@ -120,7 +142,8 @@ javascript:void((function () {
         .catch(function () {
           alert(
             '✅ Sheet row logged ✓\n' +
-            '⚠️ Download failed (CORS) — save the image manually.\n\n' +
+            '✅ Meta file downloaded ✓\n' +
+            '⚠️ Image download failed (CORS) — save the image manually.\n\n' +
             'Name: '         + suggestedName + '\n' +
             'Photographer: ' + photographer
           );

@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """
 Image watch script — monitors ~/Downloads/ and routes camelCase image files
-to the correct series folder based on ~/.image-watch-config.
+to ~/dev/images/[SECTION]/[imageName]/ based on ~/.image-watch-config.
+
+Config format:
+  SECTION=water-series/part-09
+
+On each image, the watcher also looks for a matching [imageName].meta.json
+sidecar (downloaded by the bookmarklet) and writes url.txt, license.txt,
+and photographer.txt into the destination folder, then deletes the json.
 """
 
+import json
 import os
 import re
 import shutil
@@ -13,10 +21,10 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-DOWNLOADS_DIR   = Path.home() / "Downloads"
-CONFIG_FILE     = Path.home() / ".image-watch-config"
-SERIES_BASE     = Path.home() / "dev" / "wraith" / "substack-ideas"
-LOG_FILE        = SERIES_BASE / "image-watch.log"
+DOWNLOADS_DIR = Path.home() / "Downloads"
+CONFIG_FILE   = Path.home() / ".image-watch-config"
+IMAGES_BASE   = Path.home() / "dev" / "images"
+LOG_FILE      = Path.home() / "dev" / "wraith" / "substack-ideas" / "image-watch.log"
 
 # Starts with a lowercase letter, pure camelCase base, optional -crop-/-anim- suffix, image ext.
 CAMEL_RE = re.compile(
@@ -24,6 +32,8 @@ CAMEL_RE = re.compile(
     r'(?:-(?:crop|anim)-[a-zA-Z0-9x.\-]+)?'
     r'\.(jpg|jpeg|png|webp|gif|svg|html)$'
 )
+
+META_RE = re.compile(r'^[a-z][a-zA-Z0-9]+\.meta\.json$')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,23 +49,18 @@ log = logging.getLogger(__name__)
 
 def read_config():
     if not CONFIG_FILE.exists():
-        return None, None
+        return None
     cfg = {}
     for line in CONFIG_FILE.read_text().splitlines():
         line = line.strip()
         if '=' in line and not line.startswith('#'):
             k, _, v = line.partition('=')
             cfg[k.strip()] = v.strip()
-    return cfg.get('SERIES'), cfg.get('PART')
+    return cfg.get('SECTION')
 
 
-def destination_dir(filename: str, series: str, part: str) -> Path:
-    base = SERIES_BASE / f"{series}-series"
-    if part:
-        matches = sorted(base.glob(f"part-{part}-*"))
-        part_dir = matches[0] if matches else base / f"part-{part}"
-        return part_dir / "images"
-    return base / "images"
+def destination_dir(image_stem: str, section: str) -> Path:
+    return IMAGES_BASE / section / image_stem
 
 
 def wait_for_file_stable(path: Path, timeout=10) -> bool:
@@ -74,29 +79,79 @@ def wait_for_file_stable(path: Path, timeout=10) -> bool:
     return False
 
 
-def handle_new_file(path: Path):
+def write_provenance(dest_dir: Path, meta: dict):
+    if meta.get('url'):
+        (dest_dir / 'url.txt').write_text(meta['url'])
+    if meta.get('license'):
+        (dest_dir / 'license.txt').write_text(meta['license'])
+    photographer = meta.get('photographer', '')
+    if photographer and photographer != 'UNKNOWN':
+        (dest_dir / 'photographer.txt').write_text(photographer)
+    log.info("PROVENANCE written in %s", dest_dir)
+
+
+def handle_meta_file(path: Path):
+    """Meta arrived — if the image is already in its destination, write provenance there."""
+    if not wait_for_file_stable(path):
+        return
+
+    stem = path.name[: -len('.meta.json')]
+    section = read_config()
+    if not section:
+        return
+
+    dest_dir = destination_dir(stem, section)
+    if dest_dir.exists():
+        try:
+            meta = json.loads(path.read_text())
+            write_provenance(dest_dir, meta)
+            path.unlink()
+        except Exception as e:
+            log.warning("Failed to write late provenance for %s: %s", stem, e)
+    # If dest doesn't exist yet, leave the json — the image handler will pick it up.
+
+
+def handle_image_file(path: Path):
     filename = path.name
     if not CAMEL_RE.match(filename):
         return
 
-    series, part = read_config()
-    if not series:
-        log.warning("SKIP %s — no SERIES set in %s", filename, CONFIG_FILE)
+    section = read_config()
+    if not section:
+        log.warning("SKIP %s — no SECTION set in %s", filename, CONFIG_FILE)
         return
 
     if not wait_for_file_stable(path):
         return
 
-    dest_dir = destination_dir(filename, series, part or "")
+    stem    = filename.rsplit('.', 1)[0]
+    dest_dir = destination_dir(stem, section)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / filename
 
+    dest = dest_dir / filename
     if dest.exists():
-        stem, suffix = filename.rsplit('.', 1)
-        dest = dest_dir / f"{stem}-1.{suffix}"
+        base, ext = filename.rsplit('.', 1)
+        dest = dest_dir / f"{base}-1.{ext}"
 
     shutil.move(str(path), dest)
     log.info("MOVED  %s  →  %s", path, dest)
+
+    meta_path = DOWNLOADS_DIR / (stem + '.meta.json')
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            write_provenance(dest_dir, meta)
+            meta_path.unlink()
+        except Exception as e:
+            log.warning("Failed to read meta for %s: %s", stem, e)
+
+
+def handle_new_file(path: Path):
+    filename = path.name
+    if META_RE.match(filename):
+        handle_meta_file(path)
+    else:
+        handle_image_file(path)
 
 
 class DownloadsHandler(FileSystemEventHandler):
