@@ -64,16 +64,18 @@ TITLE="$(get_title "$SERIES" "$PART")"
 
 # --- WRITE CONFIG ---
 
-{
-  echo "SERIES=$SERIES"
-  [[ -n "$PART" ]] && echo "PART=$PART"
-} > "$CONFIG"
+if [[ -n "$PART" ]]; then
+  SECTION="${SERIES}-series/part-${PART}"
+else
+  SECTION="${SERIES}-series"
+fi
 
+echo "SECTION=$SECTION" > "$CONFIG"
 echo "$TITLE" > "$TITLE_FILE"
 
 # --- CONFIRM ---
 
-echo "✅ Series: ${SERIES}${PART:+ / part ${PART}}"
-echo "   Title:  $TITLE"
-DEST="$HOME/dev/wraith/substack-ideas/${SERIES}-series/images"
-echo "   Dest:   $DEST"
+DEST="$HOME/dev/images/$SECTION"
+echo "✅ Section: $SECTION"
+echo "   Title:   $TITLE"
+echo "   Dest:    $DEST"
