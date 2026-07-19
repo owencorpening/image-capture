@@ -1,8 +1,5 @@
 // Image Attribution Logger — Bookmarklet Source
 // Readable version. To install: minify and paste into a Chrome bookmark URL field.
-// Replace placeholders before minifying:
-//   YOUR_WEB_APP_URL_HERE  → Apps Script /exec URL
-//   YOUR_SECRET_TOKEN_HERE → value of SECRET_TOKEN in Script Properties
 
 javascript:void((function () {
 
@@ -13,20 +10,40 @@ javascript:void((function () {
     ).join('');
   }
 
-  function getImageUrl() {
-    var og = document.querySelector('meta[property="og:image"]');
-    return og ? og.getAttribute('content') || '' : '';
-  }
+  // Returns the best direct CDN image URL from the page.
+  // Priority: Unsplash/Pexels CDN src on <img> → og:image → largest direct-URL <img>
+  function getImageSrc() {
+    var DIRECT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
+    var imgs = Array.from(document.querySelectorAll('img'));
 
-  // Unsplash serves images without an extension in the path but exposes fm= in query params.
-  function getExt(url) {
-    if (!url) return '.jpg';
-    var path = url.split('?')[0].split('#')[0];
-    var m = path.match(/\.(jpe?g|png|webp|gif)$/i);
-    if (m) return '.' + m[1].toLowerCase();
-    var fm = url.match(/[?&]fm=(jpe?g|png|webp|gif)/i);
-    if (fm) return '.' + fm[1].toLowerCase();
-    return '.jpg';
+    var cdnSrc = '';
+    var bestArea = 0;
+    imgs.forEach(function(img) {
+      var candidates = [
+        img.getAttribute('data-src'),
+        img.src,
+        (img.getAttribute('srcset') || '').split(',')[0].trim().split(' ')[0]
+      ];
+      candidates.forEach(function(s) {
+        if (!s) return;
+        if (s.includes('images.unsplash.com') || s.includes('images.pexels.com')) {
+          var area = (img.naturalWidth || img.width || 0) * (img.naturalHeight || img.height || 0);
+          if (area > bestArea) { bestArea = area; cdnSrc = s; }
+        }
+      });
+    });
+    if (cdnSrc) return cdnSrc;
+
+    var og = document.querySelector('meta[property="og:image"]');
+    if (og) { var ogUrl = og.getAttribute('content') || ''; if (ogUrl) return ogUrl; }
+
+    var bestImg = null; bestArea = 0;
+    imgs.forEach(function(img) {
+      if (!DIRECT_RE.test(img.src)) return;
+      var area = (img.naturalWidth || img.width || 0) * (img.naturalHeight || img.height || 0);
+      if (area > bestArea) { bestArea = area; bestImg = img; }
+    });
+    return bestImg ? bestImg.src : '';
   }
 
   var pageTitle     = document.title || 'newImage';
@@ -34,7 +51,6 @@ javascript:void((function () {
   var pageURL       = document.location.href;
   var photographer  = '';
 
-  // Attempt to scrape photographer from page DOM
   var authorElement = document.querySelector(
     'a[rel="author"], a[itemprop="author"] span, [data-testid*="photographer"], a[href^="/@"]'
   );
@@ -51,7 +67,6 @@ javascript:void((function () {
     photographer = 'UNKNOWN';
   }
 
-  // License detection
   var imageLicense = 'MANUAL CHECK REQUIRED';
   if (
     pageURL.includes('pexels.com') ||
@@ -61,93 +76,33 @@ javascript:void((function () {
     imageLicense = 'CC0 Equivalent (No Attribution)';
   }
 
-  var webAppURL = 'https://script.google.com/macros/s/AKfycbxGX-cH4Lqat1e0ygnF0SWeFBf5qeQe1t0z_MsD_WlDswqVzjX4ckPwPCV6636JqeJvyQ/exec';
+  var imageSrc = getImageSrc();
+  console.log('[OAT bookmarklet] image_src found:', imageSrc || '(none)');
 
-  function sendToSheet(postTitle) {
-    var dataToSend = {
-      name:         suggestedName,
-      url:          pageURL,
-      photographer: photographer,
-      license:      imageLicense,
-      postTitle:    postTitle || '',
-      token:        'S7wnn0zBQf5pZoZJmRQw'
-    };
-    var finalURL = webAppURL + '?' + new URLSearchParams(dataToSend).toString();
-    return fetch(finalURL, { method: 'GET', mode: 'no-cors' });
-  }
+  var webAppURL = 'https://script.google.com/macros/s/AKfycbzb7Mcw-H61ywmuA8WFnibkmK1jP2p-whQgGFtyiWuQtxaS0cDCIQV3Ruu7VbYhBm0/exec';
 
-  function downloadMeta() {
-    var meta = JSON.stringify({
-      name:         suggestedName,
-      url:          pageURL,
-      photographer: photographer,
-      license:      imageLicense
-    }, null, 2);
-    var blob    = new Blob([meta], { type: 'application/json' });
-    var blobUrl = URL.createObjectURL(blob);
-    var a       = document.createElement('a');
-    a.href      = blobUrl;
-    a.download  = suggestedName + '.meta.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 1000);
-  }
-
-  // Fetch current post title from local title server, fall back to empty string.
   fetch('http://localhost:9876/')
     .then(function (r) { return r.text(); })
     .catch(function ()  { return '';      })
     .then(function (postTitle) {
-      downloadMeta();
-      return sendToSheet(postTitle.trim());
+      var finalURL = webAppURL + '?' + new URLSearchParams({
+        name:         suggestedName,
+        url:          pageURL,
+        photographer: photographer,
+        license:      imageLicense,
+        postTitle:    postTitle.trim(),
+        imageSrc:     imageSrc || '',
+        token:        'S7wnn0zBQf5pZoZJmRQw'
+      }).toString();
+      return fetch(finalURL, { method: 'GET', mode: 'no-cors' });
     })
     .then(function () {
-
-      var imgUrl   = getImageUrl();
-      var ext      = getExt(imgUrl);
-      var filename = suggestedName + ext;
-
-      if (!imgUrl) {
-        alert(
-          '✅ Sheet row logged ✓\n' +
-          '✅ Meta file downloaded ✓\n' +
-          '⚠️ No image found on page — save manually.\n\n' +
-          'Name: '         + suggestedName + '\n' +
-          'Photographer: ' + photographer  + '\n' +
-          'Source: '       + pageURL
-        );
-        return;
-      }
-
-      fetch(imgUrl)
-        .then(function (r) { return r.blob(); })
-        .then(function (blob) {
-          var blobUrl = URL.createObjectURL(blob);
-          var a       = document.createElement('a');
-          a.href      = blobUrl;
-          a.download  = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 1000);
-          alert(
-            '✅ Logged + Downloaded!\n\n' +
-            'Sheet row logged ✓\n' +
-            'Meta file downloaded ✓\n' +
-            'Image downloaded as: ' + filename + ' ✓\n\n' +
-            'Photographer: ' + (photographer === 'UNKNOWN' ? 'UNKNOWN (check sheet)' : photographer)
-          );
-        })
-        .catch(function () {
-          alert(
-            '✅ Sheet row logged ✓\n' +
-            '✅ Meta file downloaded ✓\n' +
-            '⚠️ Image download failed (CORS) — save the image manually.\n\n' +
-            'Name: '         + suggestedName + '\n' +
-            'Photographer: ' + photographer
-          );
-        });
+      alert(
+        '✅ Logged!\n\n' +
+        'Name: '         + suggestedName + '\n' +
+        'Photographer: ' + (photographer === 'UNKNOWN' ? 'UNKNOWN (check sheet)' : photographer) + '\n' +
+        'Source: '       + pageURL
+      );
     })
     .catch(function (error) {
       alert('❌ Error sending data to Google Sheet. Check console.');

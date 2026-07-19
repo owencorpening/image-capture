@@ -34,6 +34,7 @@ function doGet(e) {
   const license   = data.license;
   const url       = data.url;
   const postTitle = data.postTitle || '';
+  const imageSrc  = data.imageSrc  || '';
   let photographer = "UNKNOWN";
 
   // --- LOCAL API FETCH FUNCTIONS ---
@@ -103,7 +104,12 @@ function doGet(e) {
     photographer,        // D: Photographer
     license,             // E: License
     postTitle,           // F: Substack post title (from ~/.image-watch-title)
-    attributionString    // G: Attribution string
+    attributionString,   // G: Attribution string
+    'staged',            // H: status — immediately visible in OAT image panel
+    '',                  // I: placed_in
+    '',                  // J: placed_date
+    '',                  // K: target
+    imageSrc             // L: image_src — direct CDN URL for thumbnail preview
   ];
 
   sheet.appendRow(rowData);
