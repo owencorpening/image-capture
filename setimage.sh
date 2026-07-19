@@ -75,7 +75,7 @@ echo "$TITLE" > "$TITLE_FILE"
 
 # --- CONFIRM ---
 
-DEST="$HOME/dev/images/$SECTION"
+DEST="$HOME/dev/oat-assets/$SECTION"
 echo "✅ Section: $SECTION"
 echo "   Title:   $TITLE"
 echo "   Dest:    $DEST"

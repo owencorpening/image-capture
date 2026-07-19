@@ -23,8 +23,8 @@ from watchdog.events import FileSystemEventHandler
 
 DOWNLOADS_DIR = Path.home() / "Downloads"
 CONFIG_FILE   = Path.home() / ".image-watch-config"
-IMAGES_BASE   = Path.home() / "dev" / "images"
-LOG_FILE      = Path.home() / "dev" / "wraith" / "substack-ideas" / "image-watch.log"
+IMAGES_BASE   = Path.home() / "dev" / "oat-assets"
+LOG_FILE      = Path.home() / ".image-watch.log"
 
 # Starts with a lowercase letter, pure camelCase base, optional -crop-/-anim- suffix, image ext.
 CAMEL_RE = re.compile(
@@ -114,6 +114,10 @@ def handle_meta_file(path: Path):
 def handle_image_file(path: Path):
     filename = path.name
     if not CAMEL_RE.match(filename):
+        return
+
+    if not any(c.isupper() for c in path.stem):
+        log.info("SKIPPED  %s  —  no uppercase in name", filename)
         return
 
     section = read_config()

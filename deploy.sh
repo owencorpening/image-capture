@@ -2,14 +2,25 @@
 set -euo pipefail
 
 echo "▶ Minifying bookmarklet..."
-# Strip comment header, minify, strip trailing semicolon, wrap in javascript:void()
-MINIFIED=$(sed '1,6d' bookmarklet.js \
-  | npx terser --compress --mangle --format quote_style=1 2>/dev/null \
+# Strip comment header and the javascript:void( ... ); wrapper, minify the IIFE,
+# strip trailing semicolon, re-wrap in javascript:void()
+MINIFIED=$(sed '1,3d' bookmarklet.js \
+  | sed '1s/^javascript:void(//' \
+  | sed '$s/);$//' \
+  | npx terser --compress --mangle --format quote_style=1 \
   | sed 's/;$//')
+if [[ -z "$MINIFIED" ]]; then
+  echo "❌ Minification produced empty output" >&2
+  exit 1
+fi
 BOOKMARKLET="javascript:void($MINIFIED)"
-echo "$BOOKMARKLET" | xclip -selection clipboard
-echo "$BOOKMARKLET" | xclip -selection primary
-echo "✅ Bookmarklet copied to clipboard"
+if [[ -n "${DISPLAY:-}" ]] && command -v xclip >/dev/null && echo "$BOOKMARKLET" | xclip -selection clipboard >/dev/null 2>&1; then
+  echo "$BOOKMARKLET" | xclip -selection primary >/dev/null 2>&1 || true
+  echo "✅ Bookmarklet copied to clipboard"
+else
+  echo "$BOOKMARKLET" > /tmp/bookmarklet.txt
+  echo "⚠️  No clipboard available — bookmarklet written to /tmp/bookmarklet.txt"
+fi
 
 echo "▶ Installing watch scripts..."
 cp watch-images.py ~/.local/bin/watch-images
