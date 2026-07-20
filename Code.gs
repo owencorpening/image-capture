@@ -5,6 +5,8 @@ const UNSPLASH_ACCESS_KEY = PropertiesService.getScriptProperties().getProperty(
 const PEXELS_ACCESS_KEY   = PropertiesService.getScriptProperties().getProperty('PEXELS_ACCESS_KEY');
 const SHEET_ID            = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
 const SECRET_TOKEN        = PropertiesService.getScriptProperties().getProperty('SECRET_TOKEN');
+const LEDGER_API_URL      = PropertiesService.getScriptProperties().getProperty('LEDGER_API_URL');
+const LEDGER_API_TOKEN    = PropertiesService.getScriptProperties().getProperty('LEDGER_API_TOKEN');
 // ----------------------------------------------------------
 
 function toTitleCase(camel) {
@@ -114,5 +116,103 @@ function doGet(e) {
 
   sheet.appendRow(rowData);
 
+  // Forward the capture to the D1 ledger (source of truth for the OAT image
+  // panel). Best-effort: a ledger outage must never break sheet logging.
+  forwardToLedger({
+    name: name,
+    displayName: cleanName,
+    sourceUrl: url,
+    photographer: photographer,
+    license: license,
+    imageSrc: imageSrc,
+    intakeSection: postTitle
+  });
+
   return ContentService.createTextOutput("Success");
+}
+
+function forwardToLedger(capture) {
+  if (!LEDGER_API_URL) return;
+  try {
+    UrlFetchApp.fetch(LEDGER_API_URL.replace(/\/$/, '') + '/captures/image', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: LEDGER_API_TOKEN ? { 'Authorization': 'Bearer ' + LEDGER_API_TOKEN } : {},
+      payload: JSON.stringify(capture),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    Logger.log('ledger forward failed: ' + e.toString());
+  }
+}
+
+/**
+ * Mirror the D1 ledger into the sheet. Run on a time-driven trigger (hourly).
+ *
+ * Upserts by Source URL (column C):
+ *  - existing rows get their status columns (H–K) refreshed from the ledger,
+ *    and F (post title) / L (image_src) filled in when empty
+ *  - ledger assets with no matching row are appended
+ *  - rows unknown to the ledger (pre-ledger history) are left untouched
+ */
+function syncFromLedger() {
+  if (!LEDGER_API_URL) throw new Error('LEDGER_API_URL script property not set');
+
+  const response = UrlFetchApp.fetch(LEDGER_API_URL.replace(/\/$/, '') + '/assets', {
+    method: 'get',
+    headers: LEDGER_API_TOKEN ? { 'Authorization': 'Bearer ' + LEDGER_API_TOKEN } : {},
+    muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) {
+    throw new Error('ledger fetch failed: HTTP ' + response.getResponseCode());
+  }
+  const assets = JSON.parse(response.getContentText()).assets || [];
+
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+  const values = sheet.getDataRange().getValues();
+  const rowByUrl = {};
+  for (let i = 1; i < values.length; i++) {
+    const rowUrl = String(values[i][2] || '').trim();
+    if (rowUrl && !(rowUrl in rowByUrl)) rowByUrl[rowUrl] = i + 1; // 1-indexed sheet row
+  }
+
+  let updated = 0, appended = 0;
+  assets.forEach(asset => {
+    const sourceUrl = String(asset.source_url || '').trim();
+    if (!sourceUrl) return;
+    if (asset.status === 'discarded' && !rowByUrl[sourceUrl]) return;
+
+    const status     = asset.placement_status === 'placed' ? 'placed' : asset.status;
+    const placedIn   = asset.draft_title || asset.draft_path || '';
+    const placedDate = asset.placement_status === 'placed' && asset.placement_updated_at
+      ? String(asset.placement_updated_at).slice(0, 10) : '';
+    const target     = asset.placement_target || '';
+    const postTitle  = asset.draft_title || asset.intake_section || '';
+
+    const rowIndex = rowByUrl[sourceUrl];
+    if (rowIndex) {
+      sheet.getRange(rowIndex, 8, 1, 4).setValues([[status, placedIn, placedDate, target]]);
+      if (!values[rowIndex - 1][5] && postTitle) sheet.getRange(rowIndex, 6).setValue(postTitle);
+      if (!values[rowIndex - 1][11] && asset.image_src) sheet.getRange(rowIndex, 12).setValue(asset.image_src);
+      updated++;
+    } else {
+      sheet.appendRow([
+        asset.created_at ? new Date(asset.created_at) : new Date(),
+        asset.source_name || asset.slug || asset.display_name || '',
+        sourceUrl,
+        asset.photographer || 'UNKNOWN',
+        asset.license || '',
+        postTitle,
+        asset.attribution || '',
+        status,
+        placedIn,
+        placedDate,
+        target,
+        asset.image_src || ''
+      ]);
+      appended++;
+    }
+  });
+
+  Logger.log('syncFromLedger: ' + updated + ' updated, ' + appended + ' appended, ' + assets.length + ' ledger assets');
 }
