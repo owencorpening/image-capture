@@ -32,15 +32,19 @@ As a longtime web developer, I had no idea you could create free HTTP endpoints 
 [Google Apps Script endpoint — free, hosted by Google]
        ↓ (API lookup for photographer)
 [Google Sheet — attribution row logged]
-       ↓ (blob download)
+       ↓ (forwarded to D1 ledger — POST /captures/image)
+[Cloudflare D1 ledger — source of truth for the OAT image panel]
+       ↓ (meanwhile: blob download)
 [~/Downloads/camelCaseName.ext]
        ↓ (watch-images.py detects new file)
-[~/dev/wraith/substack-ideas/series-[name]/images/]
+[~/dev/oat-assets/[section]/[imageStem]/]
 ```
 
-**Part 1 — Bookmarklet (capture):** logs metadata to Google Sheet and downloads the image to `~/Downloads/` with a camelCase filename.
+**Part 1 — Bookmarklet (capture):** logs metadata to Google Sheet, forwards the capture to the D1 ledger, and downloads the image to `~/Downloads/` with a camelCase filename.
 
-**Part 2 — Watch script (route):** background daemon picks up the download and moves it to the correct series folder automatically.
+**Part 2 — Watch script (route):** background daemon picks up the download and moves it to the correct section folder automatically.
+
+**Part 3 — Ledger mirror (sync):** the D1 ledger (a Cloudflare Worker, see `oat-tools/tools/d1/`) is the source of truth for staging and placement state; an hourly Apps Script trigger (`syncFromLedger`) mirrors it back into the Sheet, so the Sheet stays a human-readable view.
 
 ## System Components
 
@@ -51,6 +55,9 @@ As a longtime web developer, I had no idea you could create free HTTP endpoints 
 | Bookmarklet | Client-side JS to scrape data, format it, and initiate the request. | Optimized for major image sources (Unsplash, Pexels, Pixabay). |
 | watch-images.py | Background daemon that routes camelCase downloads to the correct series folder. | Reads ~/.image-watch-config for active series. |
 | setimage.sh | Shell script to update the active series/part config. | Alias as `setimage` in your shell. |
+| setpublished.sh | Appends a published-article row to `oat-content/content-inventory.md`. | `setpublished "<title>" "<url-or-slug>" [series] [part] [date]` |
+| image-title-server.py | Serves the active post title (`~/.image-watch-title`) on port 9876. | Written by `setimage`. |
+| D1 ledger Worker | Source of truth for staging/placement state; mirrored back to the Sheet hourly. | Lives in `oat-tools/tools/d1/`. |
 
 ## Deploying Changes
 
@@ -62,9 +69,11 @@ npm run deploy
 
 This will:
 
-1. Minify `bookmarklet.js` and copy the result to your clipboard — paste into your bookmark URL field
-2. Copy `watch-images.py` and `image-title-server.py` to `~/.local/bin/`
+1. Inject your `SECRET_TOKEN` from the gitignored `.credentials` file, minify `bookmarklet.js`, and copy the result to your clipboard — paste into your bookmark URL field
+2. Copy `watch-images.py`, `image-title-server.py`, and `setpublished.sh` to `~/.local/bin/`
 3. Restart both systemd services
+
+It fails loudly if `.credentials` is missing — paste your `SECRET_TOKEN` there first.
 
 ## Watch Script Setup
 
@@ -120,28 +129,28 @@ systemctl --user enable --now image-watch  # re-enable and start
 
 Routing is controlled by `~/.image-watch-config`:
 
-```
-SERIES=water
-PART=09
+```text
+SECTION=water-series/part-09
 ```
 
 | Config | Destination |
 | ------ | ----------- |
-| `SERIES=water`, `PART=09` | `water-series/part-09/images/` |
-| `SERIES=water` (no PART) | `water-series/images/` |
-| `SERIES=cng`, `PART=06` | `cng-series/part-06/images/` |
+| `SECTION=water-series/part-09` | `~/dev/oat-assets/water-series/part-09/[imageStem]/` |
+| `SECTION=water-series` | `~/dev/oat-assets/water-series/[imageStem]/` |
+| `SECTION=cng-series/part-06` | `~/dev/oat-assets/cng-series/part-06/[imageStem]/` |
 
-All matching files land flat in the images directory — no subdirectories. File type is signaled by the filename itself (e.g. `bajaMap-crop-1080x1080.jpg`).
+Each image gets its own folder named after the file stem, alongside provenance sidecar files (`url.txt`, `license.txt`, `photographer.txt`) when capture metadata is available.
 
 Files that do **not** match camelCase (e.g. `Screenshot 2026-04-17.png`, `unsplash-abc123.jpg`) are silently ignored.
 
-Update the active series/part at any time — no restart needed:
+Update the active section at any time — no restart needed:
 
 ```bash
-setimage water 09
+setimage water 9      # → SECTION=water-series/part-09
+setimage water        # → SECTION=water-series
 ```
 
-Moves are logged to `~/dev/wraith/substack-ideas/image-watch.log`.
+`setimage` also writes the matching post title to `~/.image-watch-title`, which `image-title-server` serves on port 9876. Moves are logged to `~/.image-watch.log`.
 
 ## 🔒 Security Setup (5 minutes, protects your data)
 
@@ -164,16 +173,18 @@ Moves are logged to `~/dev/wraith/substack-ideas/image-watch.log`.
 
 | Property Name | Value | Where to Get It |
 |--------------|-------|-----------------|
-| `SECRET_TOKEN` | `[your random string]` | Generate a random 16+ character string |
+| `SECRET_TOKEN` | `[your random string]` | Generate a random 16+ character string (`openssl rand -hex 20`) |
+| `SHEET_ID` | `[your Google Sheet ID]` | From the sheet URL: `docs.google.com/spreadsheets/d/[THIS_PART]/edit` |
 | `UNSPLASH_ACCESS_KEY` | `[your Unsplash API key]` | https://unsplash.com/developers |
 | `PEXELS_ACCESS_KEY` | `[your Pexels API key]` | https://www.pexels.com/api/ |
+| `LEDGER_API_URL` | `[your ledger Worker URL]` | Optional — D1 ledger base URL (see `oat-tools/tools/d1/`) |
+| `LEDGER_API_TOKEN` | `[the Worker's bearer token]` | Optional — the Worker's `LEDGER_API_TOKEN` secret |
 
 - Click **"Save script properties"**
 
-#### 3. Get Your Google Sheet ID
+If `LEDGER_API_URL` is unset, ledger forwarding and `syncFromLedger()` are simply skipped — sheet logging works standalone.
 
-- Open your Google Sheet
-- Copy the ID from the URL: `https://docs.google.com/spreadsheets/d/[THIS_IS_YOUR_SHEET_ID]/edit`
+After generating `SECRET_TOKEN`, also paste it into `.credentials` in this repo (gitignored) — `deploy.sh` injects it into the bookmarklet at build time so the real token never appears in committed code.
 
 ## Sheet Structure
 
@@ -183,134 +194,25 @@ This is the required column order in your Google Sheet (starting from Column A).
 |-----|-------------|-------------|-------|
 | A | Timestamp | `new Date()` | Automatically generated by the script. |
 | B | Name | Page Title (CamelCase) | Generated using `toCamelCase()` from the page title. |
-| C | Source URL | `document.location.href` | Direct URL of the image source page. |
+| C | Source URL | `document.location.href` | Direct URL of the image source page. Upsert key for the ledger mirror. |
 | D | Photographer | Scraped / Fallback | Attempts to find photographer (e.g., Unsplash /@[user]), defaults to 'UNKNOWN'. |
 | E | License | Logic-based | 'CC0 Equivalent (No Attribution)' for known free sites; otherwise 'MANUAL CHECK REQUIRED'. |
-| F | Substack Post Title | `''` | Left blank for manual entry later. |
+| F | Substack Post Title | Title server | The active post title captured at log time (see `image-title-server`). |
 | G | Attribution String | Constructed | The final formatted string ready for publication. |
+| H | status | Ledger mirror | `staged` at capture; refreshed hourly from the D1 ledger. |
+| I | placed_in | Ledger mirror | Draft the image was placed into. |
+| J | placed_date | Ledger mirror | Date the placement happened. |
+| K | target | Ledger mirror | `substack`, `carousel`, `linkedin-post`, … |
+| L | image_src | Bookmarklet | Direct CDN URL for thumbnail previews. |
+
+Columns H–K are owned by `syncFromLedger()` (an hourly time-driven Apps Script trigger): it refreshes them from the D1 ledger for every row it recognizes by Source URL, appends rows for ledger assets the sheet lacks, and leaves unrecognized (pre-ledger) rows untouched.
 
 ## Apps Script Code (Code.gs)
 
-This code runs as the deployed Web App, listening for `GET` requests and appending rows to the sheet. This block should be saved as your `Code.gs` file in the Apps Script Editor.
+The deployed Web App code lives in [Code.gs](Code.gs) — paste the whole file into the Apps Script editor whenever it changes, then deploy a new version (next section). It provides:
 
-```javascript
-const SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with your actual Sheet ID
-const SHEET_NAME = 'Sheet1'; // ***CRITICAL: MUST MATCH THE TAB NAME***
-
-// --- LOAD API KEYS FROM SCRIPT PROPERTIES (SECURE) ---
-const UNSPLASH_ACCESS_KEY = PropertiesService.getScriptProperties().getProperty('UNSPLASH_ACCESS_KEY');
-const PEXELS_ACCESS_KEY = PropertiesService.getScriptProperties().getProperty('PEXELS_ACCESS_KEY');
-const SECRET_TOKEN = PropertiesService.getScriptProperties().getProperty('SECRET_TOKEN');
-// ------------------------------------------------------
-
-/**
- * Helper to convert camelCase to Human Readable Title Case.
- */
-function toTitleCase(camel) {
-  return camel
-    .replace(/([A-Z])/g, ' $1')
-    .trim()
-    .replace(/^./, str => str.toUpperCase());
-}
-
-/**
- * Fetches the author name from the Pexels API.
- */
-function fetchPexelsAuthor(imageID) {
-  const apiUrl = `https://api.pexels.com/v1/photos/${imageID}`;
-  const options = {
-    headers: {
-      'Authorization': PEXELS_ACCESS_KEY
-    }
-  };
-  
-  try {
-    const response = UrlFetchApp.fetch(apiUrl, options);
-    const data = JSON.parse(response.getContentText());
-    if (data.photographer) {
-      return data.photographer;
-    }
-  } catch (e) {
-    Logger.log("Pexels API fetch failed: " + e.toString());
-  }
-  return "UNKNOWN";
-}
-
-/**
- * Fetches the author name from the Unsplash API.
- */
-function fetchUnsplashAuthor(imageID) {
-  const apiUrl = `https://api.unsplash.com/photos/${imageID}?client_id=${UNSPLASH_ACCESS_KEY}`;
-  
-  try {
-    const response = UrlFetchApp.fetch(apiUrl);
-    const data = JSON.parse(response.getContentText());
-    if (data.user && data.user.name) {
-      return data.user.name;
-    }
-  } catch (e) {
-    Logger.log("Unsplash API fetch failed: " + e.toString());
-  }
-  return "UNKNOWN";
-}
-
-/**
- * Handles incoming GET requests from the custom bookmarklet.
- */
-function doGet(e) {
-  // 🔒 Security: Verify the request has the correct token
-  if (e.parameter.token !== SECRET_TOKEN) {
-    return ContentService.createTextOutput("Unauthorized");
-  }
-  
-  const data = e.parameter;
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = ss.getSheetByName(SHEET_NAME);
-  
-  // 1. Define the variables and attempt server-side author lookup
-  const name = data.name;
-  let photographer = "UNKNOWN"; // Start with UNKNOWN, then try APIs
-  const license = data.license;
-  const url = data.url;
-  
-  // 1a. SERVER-SIDE ENHANCEMENT: API Lookup
-  if (url.includes('unsplash.com/photos/')) {
-    const urlParts = url.split('/');
-    const imageID = urlParts[urlParts.length - 1].split('?')[0];
-    photographer = fetchUnsplashAuthor(imageID);
-  } else if (url.includes('pexels.com/photo/')) {
-    // ROBUST PEXELS ID EXTRACTION: Use the last path segment (which is the ID)
-    const urlParts = url.split('/');
-    // Get the last segment (e.g., 1234567) and remove any query strings
-    const imageID = urlParts[urlParts.length - 1].split('?')[0];
-    // Check if the ID is found and call the API
-    if (imageID) {
-      photographer = fetchPexelsAuthor(imageID);
-    }
-  }
-  
-  // 2. CONSTRUCT THE ATTRIBUTION STRING
-  const cleanName = toTitleCase(name);
-  const urlDomainMatch = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n]+)/im);
-  const sourceDomain = urlDomainMatch ? urlDomainMatch[1] : url;
-  const attributionString = `Image: ${cleanName}, by ${photographer}, Source: ${sourceDomain}. License: ${license}.`;
-  
-  // 3. Define the final row data for columns A through G
-  const rowData = [
-    new Date(),        // A: Timestamp
-    name,              // B: Name (camelCase)
-    url,               // C: Source URL
-    photographer,      // D: Photographer (from API or UNKNOWN)
-    license,           // E: License Status
-    '',                // F: Substack Post Title (left blank)
-    attributionString  // G: Attribution String
-  ];
-  
-  sheet.appendRow(rowData);
-  
-  return ContentService.createTextOutput("Success");
-}
-```
+- `doGet(e)` — verifies the token, looks up photographer metadata from the provider APIs, appends the sheet row, and forwards the capture to the D1 ledger (best-effort: a ledger outage never breaks sheet logging)
+- `syncFromLedger()` — the hourly ledger→sheet mirror; wire it to a time-driven trigger (clock icon → Add Trigger → `syncFromLedger` → Time-driven → Hour timer)
 
 ## Deploying the Web App
 
@@ -352,14 +254,13 @@ Think of it like everyone building their own personal API, for free - or optiona
 
 ## Bookmarklet Code
 
-This is the single line of code you paste directly into your browser's bookmark manager. **Replace the placeholders before using:**
+The readable source is [bookmarklet.js](bookmarklet.js). The committed file carries a `YOUR_SECRET_TOKEN_HERE` placeholder — the real token lives in the gitignored `.credentials` file and is injected at build time:
 
-- `YOUR_WEB_APP_URL_HERE` → Your actual Web App URL from the deployment step
-- `YOUR_SECRET_TOKEN_HERE` → Your secret token (same one from Script Properties)
-
-```javascript
-javascript:void((function(){function toCamelCase(str){str=str.replace(/[^a-zA-Z0-9 ]/g,'').trim();return str.split(/\s+/).map((w,i)=>i==0?w.toLowerCase():w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join('');}function getImageUrl(){var og=document.querySelector('meta[property="og:image"]');return og?og.getAttribute('content')||'':'';}function getExt(url){if(!url)return'.jpg';var path=url.split('?')[0].split('#')[0];var m=path.match(/\.(jpe?g|png|webp|gif)$/i);if(m)return'.'+m[1].toLowerCase();var fm=url.match(/[?&]fm=(jpe?g|png|webp|gif)/i);if(fm)return'.'+fm[1].toLowerCase();return'.jpg';}var pageTitle=document.title||'newImage';var suggestedName=toCamelCase(pageTitle);var pageURL=document.location.href;var photographer='';var authorElement=document.querySelector('a[rel="author"],a[itemprop="author"] span,[data-testid*="photographer"],a[href^="/@"]');if(authorElement){photographer=authorElement.innerText.trim();}if(!photographer){var photoBy=document.querySelector('[class*="photographer"],[class*="author"]');if(photoBy&&photoBy.innerText.includes('by')){photographer=photoBy.innerText.replace(/.*by\s/i,'').trim();}}if(!photographer){photographer='UNKNOWN';}var imageLicense='MANUAL CHECK REQUIRED';if(pageURL.includes('pexels.com')||pageURL.includes('pixabay.com')||pageURL.includes('unsplash.com')){imageLicense='CC0 Equivalent (No Attribution)';}var dataToSend={name:suggestedName,url:pageURL,photographer:photographer,license:imageLicense,token:'YOUR_SECRET_TOKEN_HERE'};var webAppURL='YOUR_WEB_APP_URL_HERE';var params=new URLSearchParams(dataToSend).toString();var finalURL=webAppURL+'?'+params;fetch(finalURL,{method:'GET',mode:'no-cors'}).then(function(){var imgUrl=getImageUrl();var ext=getExt(imgUrl);var filename=suggestedName+ext;if(!imgUrl){alert('✅ Sheet row logged ✓\n⚠️ No image found on page — save manually.\n\nName: '+suggestedName+'\nPhotographer: '+photographer+'\nSource: '+pageURL);return;}fetch(imgUrl).then(function(r){return r.blob();}).then(function(blob){var blobUrl=URL.createObjectURL(blob);var a=document.createElement('a');a.href=blobUrl;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(blobUrl);},1000);alert('✅ Logged + Downloaded!\n\nSheet row logged ✓\nImage downloaded as: '+filename+' ✓\n\nPhotographer: '+photographer);}).catch(function(){alert('✅ Sheet row logged ✓\n⚠️ Download failed (CORS) — save the image manually.\n\nName: '+suggestedName+'\nPhotographer: '+photographer);});}).catch(function(error){alert('❌ Error sending data to Google Sheet. Check console.');console.error('Fetch error:',error);});})());
+```bash
+npm run deploy
 ```
+
+This minifies the bookmarklet with your token baked in and copies the result to your clipboard — paste it into your bookmark's URL field. Never paste the real token into the committed source.
 
 ### Installing the Bookmarklet
 
@@ -396,8 +297,10 @@ That's it. The bookmark is now a tiny program that runs when you click it.
 1. **Bookmarklet** scrapes the page title, URL, photographer, and `og:image` URL from the page DOM
 2. **GET request** sends the metadata (with your secret token) to your Web App URL
 3. **Apps Script** verifies the token, fetches additional photographer data from APIs if available, formats the attribution string, and appends a row to your Google Sheet
-4. **Image download** — after the sheet request fires, the bookmarklet fetches the `og:image` as a blob and triggers a browser download named `camelCaseName.ext` (extension detected from the image URL; defaults to `.jpg`)
-5. **Success alert** confirms both: sheet row logged ✓ and image downloaded ✓
+4. **Ledger forward** — Apps Script also POSTs the capture to the D1 ledger Worker (best-effort; a ledger outage never blocks sheet logging)
+5. **Image download** — after the sheet request fires, the bookmarklet fetches the `og:image` as a blob and triggers a browser download named `camelCaseName.ext` (extension detected from the image URL; defaults to `.jpg`)
+6. **Success alert** confirms both: sheet row logged ✓ and image downloaded ✓
+7. **Hourly**, the `syncFromLedger` trigger mirrors ledger state (status, placements) back into the Sheet's H–K columns
 
 ---
 
