@@ -42,8 +42,10 @@ get_title() {
     water_07) echo "Part VII — Integrated Infrastructure Surge for Middle East Water Resilience" ;;
     water_08) echo "Part VIII — Proving the Surge — When Regional Becomes Replicable" ;;
     water_09) echo "Part IX — The Global Water–Energy–Transport Corridors" ;;
-    water_10) echo "Part X — The 1900 AD Baseline: Geophysical Restoration and the Biological Surge" ;;
-    water_11) echo "Part XI — The Corridor Already Exists" ;;
+    water_10) echo "Part X: The GWETC — How It's Governed and Where It Starts" ;;
+    water_11) echo "Part XI — Who Builds the Builders" ;;
+    water_12) echo "Part XII — The 1900 AD Baseline: Geophysical Restoration and the Biological Surge" ;;
+    water_13) echo "Part XIII — It Was Never Just About Water" ;;
     water_)   echo "Water Series" ;;
 
     # CNG series
