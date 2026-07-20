@@ -2,11 +2,19 @@
 set -euo pipefail
 
 echo "▶ Minifying bookmarklet..."
-# Strip comment header and the javascript:void( ... ); wrapper, minify the IIFE,
-# strip trailing semicolon, re-wrap in javascript:void()
+# The committed bookmarklet.js carries a placeholder token; the real one lives
+# in the gitignored .credentials file and is injected here at build time.
+if [[ ! -s .credentials ]]; then
+  echo "❌ Missing .credentials — paste your SECRET_TOKEN there (gitignored)" >&2
+  exit 1
+fi
+TOKEN=$(tr -d ' \n\r' < .credentials | sed 's/^[A-Z_]*=//')
+# Strip comment header and the javascript:void( ... ); wrapper, inject the
+# token, minify the IIFE, strip trailing semicolon, re-wrap in javascript:void()
 MINIFIED=$(sed '1,3d' bookmarklet.js \
   | sed '1s/^javascript:void(//' \
   | sed '$s/);$//' \
+  | sed "s/YOUR_SECRET_TOKEN_HERE/$TOKEN/" \
   | npx terser --compress --mangle --format quote_style=1 \
   | sed 's/;$//')
 if [[ -z "$MINIFIED" ]]; then

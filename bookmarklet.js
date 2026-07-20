@@ -92,7 +92,7 @@ javascript:void((function () {
         license:      imageLicense,
         postTitle:    postTitle.trim(),
         imageSrc:     imageSrc || '',
-        token:        'S7wnn0zBQf5pZoZJmRQw'
+        token:        'YOUR_SECRET_TOKEN_HERE'
       }).toString();
       return fetch(finalURL, { method: 'GET', mode: 'no-cors' });
     })
