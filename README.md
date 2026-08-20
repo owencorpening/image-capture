@@ -44,7 +44,7 @@ As a longtime web developer, I had no idea you could create free HTTP endpoints 
 
 **Part 2 — Watch script (route):** background daemon picks up the download and moves it to the correct section folder automatically.
 
-**Part 3 — Ledger mirror (sync):** the D1 ledger (a Cloudflare Worker, see `oat-tools/tools/d1/`) is the source of truth for staging and placement state; an hourly Apps Script trigger (`syncFromLedger`) mirrors it back into the Sheet, so the Sheet stays a human-readable view.
+**Part 3 — Ledger mirror (sync):** the D1 ledger (a Cloudflare Worker, see `oat-tools/tools/d1/`) is the source of truth for staging and placement state; the Worker's own hourly Cron Trigger mirrors it back into the Sheet via the Google Sheets API, so the Sheet stays a human-readable view. (This used to be an Apps Script time-driven trigger calling `syncFromLedger()` — moved to the Worker because Apps Script trigger auth could silently expire and require manual re-authorization. `syncFromLedger()` is still in `Code.gs`, undeployed, as a manual fallback.)
 
 ## System Components
 
@@ -205,14 +205,14 @@ This is the required column order in your Google Sheet (starting from Column A).
 | K | target | Ledger mirror | `substack`, `carousel`, `linkedin-post`, … |
 | L | image_src | Bookmarklet | Direct CDN URL for thumbnail previews. |
 
-Columns H–K are owned by `syncFromLedger()` (an hourly time-driven Apps Script trigger): it refreshes them from the D1 ledger for every row it recognizes by Source URL, appends rows for ledger assets the sheet lacks, and leaves unrecognized (pre-ledger) rows untouched.
+Columns H–K are owned by the ledger Worker's hourly Cron Trigger (`syncLedgerToSheet()` in `oat-tools/tools/d1/worker/sheetSync.js`): it refreshes them from the D1 ledger for every row it recognizes by Source URL, appends rows for ledger assets the sheet lacks, and leaves unrecognized (pre-ledger) rows untouched.
 
 ## Apps Script Code (Code.gs)
 
 The deployed Web App code lives in [Code.gs](Code.gs) — paste the whole file into the Apps Script editor whenever it changes, then deploy a new version (next section). It provides:
 
 - `doGet(e)` — verifies the token, looks up photographer metadata from the provider APIs, appends the sheet row, and forwards the capture to the D1 ledger (best-effort: a ledger outage never breaks sheet logging)
-- `syncFromLedger()` — the hourly ledger→sheet mirror; wire it to a time-driven trigger (clock icon → Add Trigger → `syncFromLedger` → Time-driven → Hour timer)
+- `syncFromLedger()` — the old hourly ledger→sheet mirror. **No longer wired to a trigger** — this now runs as an hourly Cloudflare Cron Trigger on the ledger Worker itself (`oat-tools/tools/d1/worker`, see its README's "Scheduled Sync" section), since Apps Script's own trigger auth could silently expire. Left here, undeployed, as a manual fallback only.
 
 ## Deploying the Web App
 

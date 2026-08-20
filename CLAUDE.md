@@ -86,3 +86,14 @@ Title mappings for water (01–11) and CNG (01–06) are hardcoded in `setimage.
 - `UNSPLASH_ACCESS_KEY`
 - `PEXELS_ACCESS_KEY`
 - `SHEET_ID`
+
+## Ledger mirror (columns H–L)
+
+`Code.gs` also forwards bookmarklet captures to a D1 ledger Worker
+(`oat-tools/tools/d1/`) that's the source of truth for staging/placement
+state. Columns H–L (status, placed_in, placed_date, target, image_src) are
+mirrored back into the sheet by that Worker's own hourly Cron Trigger —
+**not** by an Apps Script trigger anymore. `syncFromLedger()` still exists
+in `Code.gs` but is undeployed, kept only as a manual fallback. See
+`oat-tools/tools/d1/README.md`'s "Scheduled Sync" section for how it works
+and its secrets.

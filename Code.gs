@@ -147,7 +147,12 @@ function forwardToLedger(capture) {
 }
 
 /**
- * Mirror the D1 ledger into the sheet. Run on a time-driven trigger (hourly).
+ * Mirror the D1 ledger into the sheet.
+ *
+ * NOT wired to a trigger — superseded by an hourly Cloudflare Cron Trigger
+ * on the ledger Worker itself (oat-tools/tools/d1/worker/sheetSync.js),
+ * because Apps Script time-driven trigger auth could silently expire.
+ * Kept here as a manual fallback only (Run ▶ from this editor).
  *
  * Upserts by Source URL (column C):
  *  - existing rows get their status columns (H–K) refreshed from the ledger,
