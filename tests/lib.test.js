@@ -123,11 +123,20 @@ describe('detectLicense', () => {
 // --- bookmarklet build ---
 describe('bookmarklet build', () => {
   const { execSync } = require('child_process');
+  // Dummy value only. No real or former SECRET_TOKEN belongs in this public
+  // repo (#2). deploy.sh injects the real token from the gitignored
+  // .credentials file at build time.
+  const TEST_TOKEN = 'test-token-not-a-secret';
   let bookmarklet;
 
   beforeAll(() => {
+    // Mirrors deploy.sh's minify pipeline. Keep the two in sync.
     bookmarklet = execSync(
-      "sed '1,6d' bookmarklet.js | npx terser --compress --mangle --format quote_style=1 2>/dev/null | sed 's/;$//'"
+      "sed '1,3d' bookmarklet.js" +
+      " | sed '1s/^javascript:void(//'" +
+      " | sed '$s/);$//'" +
+      ` | sed "s/YOUR_SECRET_TOKEN_HERE/${TEST_TOKEN}/"` +
+      " | npx terser --compress --mangle --format quote_style=1 2>/dev/null | sed 's/;$//'"
     ).toString().trim();
     bookmarklet = `javascript:void(${bookmarklet})`;
   });
@@ -141,8 +150,9 @@ describe('bookmarklet build', () => {
     expect(bookmarklet.endsWith(')')).toBe(true);
   });
 
-  test('contains correct token', () => {
-    expect(bookmarklet).toContain('S7wnn0zBQf5pZoZJmRQw');
+  test('injects the token in place of the placeholder', () => {
+    expect(bookmarklet).toContain(TEST_TOKEN);
+    expect(bookmarklet).not.toContain('YOUR_SECRET_TOKEN_HERE');
   });
 
   test('contains localhost title server fetch', () => {
