@@ -19,12 +19,22 @@ function toTitleCase(camel) {
     .replace(/^./, str => str.toUpperCase());
 }
 
-function doGet(e) {
-  Logger.log('params: ' + JSON.stringify(e.parameter));
+function redactToken(params) {
+  var copy = {};
+  Object.keys(params || {}).forEach(function (k) {
+    copy[k] = k === 'token' ? '[redacted]' : params[k];
+  });
+  return copy;
+}
 
-  // Security: reject requests without the correct token
-  if (e.parameter.token !== SECRET_TOKEN) {
-    Logger.log('token mismatch — received: ' + e.parameter.token);
+function doGet(e) {
+  // Never log the token, valid or not (#1). Execution logs aren't a secret store.
+  Logger.log('params: ' + JSON.stringify(redactToken(e.parameter)));
+
+  // Security: reject requests without the correct token. Fails closed if
+  // SECRET_TOKEN isn't set in Script Properties.
+  if (!SECRET_TOKEN || e.parameter.token !== SECRET_TOKEN) {
+    Logger.log('token mismatch — request rejected');
     return ContentService.createTextOutput("Unauthorized");
   }
 
